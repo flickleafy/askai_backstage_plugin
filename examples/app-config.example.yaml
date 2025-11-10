@@ -1,0 +1,196 @@
+# Example App Configuration
+
+## app-config.yaml
+
+```yaml
+app:
+  title: Backstage with Ask AI
+  baseUrl: http://localhost:3000
+
+organization:
+  name: My Company
+
+backend:
+  baseUrl: http://localhost:7007
+  listen:
+    port: 7007
+  csp:
+    connect-src: ["'self'", 'http:', 'https:']
+  cors:
+    origin: http://localhost:3000
+    methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
+    credentials: true
+  database:
+    client: better-sqlite3
+    connection: ':memory:'
+
+# Ask AI Plugin Configuration
+askAi:
+  # Default LLM model for chat completions
+  defaultModel: "llama3.2"
+  
+  # Model for generating embeddings
+  embeddingModel: "all-minilm"
+  
+  # Ollama server URL
+  ollamaBaseUrl: "http://localhost:11434"
+  
+  # Enable RAG (Retrieval-Augmented Generation)
+  ragEnabled: true
+  
+  # Number of similar documents to retrieve
+  defaultTopK: 5
+  
+  # Document chunking configuration
+  chunkSize: 512       # Words per chunk
+  chunkOverlap: 50     # Words overlap between chunks
+
+catalog:
+  import:
+    entityFilename: catalog-info.yaml
+    pullRequestBranchName: backstage-integration
+  rules:
+    - allow: [Component, System, API, Resource, Location]
+
+  locations:
+    # Local example entities
+    - type: file
+      target: ../../examples/entities.yaml
+
+    # Example GitHub discovery
+    - type: url
+      target: https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/all.yaml
+
+techdocs:
+  builder: 'local'
+  generator:
+    runIn: 'local'
+  publisher:
+    type: 'local'
+```
+
+## app-config.local.yaml
+
+```yaml
+# Local development overrides
+askAi:
+  defaultModel: "llama3.2"
+  embeddingModel: "all-minilm"
+  ollamaBaseUrl: "http://localhost:11434"
+  ragEnabled: true
+  defaultTopK: 3         # Faster for development
+  chunkSize: 256         # Smaller chunks for testing
+  chunkOverlap: 25
+```
+
+## app-config.production.yaml
+
+```yaml
+app:
+  baseUrl: https://backstage.example.com
+
+backend:
+  baseUrl: https://backstage.example.com
+  listen:
+    port: 7007
+  database:
+    client: pg
+    connection:
+      host: ${POSTGRES_HOST}
+      port: ${POSTGRES_PORT}
+      user: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}
+      database: ${POSTGRES_DB}
+
+# Production Ask AI Configuration
+askAi:
+  defaultModel: "${ASK_AI_DEFAULT_MODEL}"
+  embeddingModel: "${ASK_AI_EMBEDDING_MODEL}"
+  ollamaBaseUrl: "${OLLAMA_URL}"
+  ragEnabled: true
+  defaultTopK: 5
+  chunkSize: 512
+  chunkOverlap: 50
+
+# Optional: Configure rate limiting, caching, etc.
+```
+
+## Environment Variables (.env)
+
+```bash
+# Postgres
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=backstage
+POSTGRES_PASSWORD=secret
+POSTGRES_DB=backstage
+
+# Ollama
+OLLAMA_URL=http://localhost:11434
+ASK_AI_DEFAULT_MODEL=llama3.2
+ASK_AI_EMBEDDING_MODEL=all-minilm
+
+# Optional
+NODE_ENV=production
+LOG_LEVEL=info
+```
+
+## Example Entities (examples/entities.yaml)
+
+```yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: payment-service
+  description: Handles payment processing and transactions
+  tags:
+    - java
+    - spring-boot
+    - payments
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+spec:
+  type: service
+  lifecycle: production
+  owner: team-payments
+  system: payment-system
+  providesApis:
+    - payment-api
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: payment-api
+  description: REST API for payment operations
+  tags:
+    - rest
+    - payments
+spec:
+  type: openapi
+  lifecycle: production
+  owner: team-payments
+  system: payment-system
+  definition: |
+    openapi: 3.0.0
+    info:
+      title: Payment API
+      version: 1.0.0
+    paths:
+      /payments:
+        post:
+          summary: Create a payment
+          responses:
+            '201':
+              description: Payment created
+
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: payment-system
+  description: Complete payment processing system
+spec:
+  owner: team-payments
+```

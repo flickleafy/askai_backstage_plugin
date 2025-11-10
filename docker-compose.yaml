@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector extension for persistent vector storage
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: backstage-postgres-vectors
+    environment:
+      POSTGRES_DB: backstage_vectors
+      POSTGRES_USER: backstage
+      POSTGRES_PASSWORD: backstage_dev_password
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+      - ./plugins/ask-ai-backend/migrations:/docker-entrypoint-initdb.d/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U backstage -d backstage_vectors"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - backstage-network
+
+  # Ollama LLM server
+  ollama:
+    image: ollama/ollama:latest
+    container_name: backstage-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - backstage-network
+    
+  # Pull models on startup (runs once)
+  ollama-setup:
+    image: ollama/ollama:latest
+    container_name: backstage-ollama-setup
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        echo "Waiting for Ollama to be ready..."
+        sleep 10
+        echo "Pulling llama3.2 model..."
+        ollama pull llama3.2
+        echo "Pulling all-minilm embedding model..."
+        ollama pull all-minilm
+        echo "Models ready!"
+    restart: "no"
+    networks:
+      - backstage-network
+
+volumes:
+  postgres_data:
+    driver: local
+  ollama_data:
+    driver: local
+
+networks:
+  backstage-network:
+    driver: bridge

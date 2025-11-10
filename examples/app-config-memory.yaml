@@ -1,0 +1,19 @@
+# Example app-config.yaml for In-Memory Vector Store (Development)
+
+askAi:
+  # LLM Configuration
+  defaultModel: "llama3.2"        # Chat model
+  embeddingModel: "all-minilm"     # Embedding model
+  ollamaBaseUrl: "http://localhost:11434"
+  
+  # RAG Configuration
+  ragEnabled: true                 # Enable RAG functionality
+  defaultTopK: 5                   # Number of chunks to retrieve
+  
+  # Document Processing
+  chunkSize: 512                   # Words per chunk
+  chunkOverlap: 50                 # Words overlap between chunks
+  
+  # Vector Store Configuration
+  vectorStore:
+    type: "memory"                 # Use in-memory vector store (default)

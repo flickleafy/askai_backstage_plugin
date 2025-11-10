@@ -1,0 +1,31 @@
+# Example app-config.yaml for PostgreSQL Vector Store
+
+askAi:
+  # LLM Configuration
+  defaultModel: "llama3.2"        # Chat model
+  embeddingModel: "all-minilm"     # Embedding model (384 dimensions)
+  ollamaBaseUrl: "http://localhost:11434"
+  
+  # RAG Configuration
+  ragEnabled: true                 # Enable RAG functionality
+  defaultTopK: 5                   # Number of chunks to retrieve
+  
+  # Document Processing
+  chunkSize: 512                   # Words per chunk
+  chunkOverlap: 50                 # Words overlap between chunks
+  
+  # Vector Store Configuration
+  vectorStore:
+    type: "postgresql"             # Options: "memory" | "postgresql"
+    
+    # PostgreSQL Configuration (required when type is "postgresql")
+    postgresql:
+      host: "localhost"            # PostgreSQL host
+      port: 5432                   # PostgreSQL port
+      database: "backstage_vectors" # Database name
+      user: "backstage"            # Database user
+      password: "${POSTGRES_PASSWORD}"  # Use environment variable for security
+      ssl: false                   # Enable SSL/TLS (recommended for production)
+      maxConnections: 10           # Connection pool size
+      idleTimeoutMillis: 30000     # Idle connection timeout (30 seconds)
+      connectionTimeoutMillis: 5000 # Connection timeout (5 seconds)
