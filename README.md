@@ -13,7 +13,70 @@ A comprehensive Backstage plugin that integrates Ollama LLM with Retrieval-Augme
 
 ## Architecture
 
-The plugin is structured following Clean Code principles with clear separation of concerns:
+The plugin is structured following Clean Code principles with clear separation of concerns.
+
+### RAG Strategy Pattern
+
+The plugin uses the **Strategy Pattern** to support multiple RAG techniques and algorithms. The `RAGService` acts as a generic orchestrator that delegates all RAG operations to the active strategy implementation.
+
+**Key Components:**
+
+- **`IRAGStrategy`** interface: Contract that all RAG strategies must implement
+- **`RAGStrategyFactory`**: Factory that instantiates the configured strategy
+- **`SimpleRAGStrategy`**: Default implementation (traditional retrieve-then-generate)
+- **`RAGService`**: Generic service that orchestrates strategy execution
+
+**Benefits:**
+
+- ✅ **Extensible**: Add new RAG techniques without modifying core service
+- ✅ **Testable**: Each strategy can be tested independently
+- ✅ **Configurable**: Switch strategies via configuration
+- ✅ **Clean**: Follows Open/Closed Principle
+
+**Implementing a Custom Strategy:**
+
+Create a new file in `plugins/ask-ai-backend/src/rag/strategies/`:
+
+```typescript
+import { IRAGStrategy, RAGAnswer, RAGContext } from '../types';
+import { RAGServiceDependencies } from '../../interfaces';
+
+export class MyCustomRAGStrategy implements IRAGStrategy {
+  readonly name = 'custom';
+
+  constructor(private readonly deps: RAGServiceDependencies) {}
+
+  async indexAll(): Promise<void> {
+    // Your indexing logic
+  }
+
+  async indexEntity(entityRef: string): Promise<void> {
+    // Your entity-specific indexing
+  }
+
+  async retrieve(context: RAGContext): Promise<DocumentChunk[]> {
+    // Your retrieval logic (e.g., hybrid search, reranking)
+  }
+
+  async answer(context: RAGContext): Promise<RAGAnswer> {
+    // Your answer generation logic
+  }
+}
+```
+
+Register it in `RAGStrategyFactory.ts`:
+
+```typescript
+case 'custom':
+  return new MyCustomRAGStrategy(dependencies);
+```
+
+Configure it in `app-config.yaml`:
+
+```yaml
+askAi:
+  ragStrategy: "custom"
+```
 
 ### Backend Architecture
 
@@ -22,14 +85,23 @@ ask-ai-backend/
 ├── src/
 │   ├── models/           # Domain models and types
 │   ├── interfaces/       # Service interfaces (SOLID)
+│   ├── rag/              # RAG strategy pattern
+│   │   ├── types.ts              # RAG interfaces and types
+│   │   ├── index.ts              # Public exports
+│   │   ├── RAGStrategyFactory.ts # Strategy factory
+│   │   └── strategies/           # Strategy implementations
+│   │       ├── SimpleRAGStrategy.ts      # Default RAG strategy
+│   │       └── SimpleRAGStrategy.test.ts
 │   ├── services/         # Service implementations
 │   │   ├── ConfigService.ts
 │   │   ├── OllamaLLMService.ts
 │   │   ├── InMemoryVectorStore.ts
+│   │   ├── PgVectorStore.ts
+│   │   ├── VectorStoreFactory.ts
 │   │   ├── DocumentProcessor.ts
 │   │   ├── CatalogCollector.ts
 │   │   ├── TechDocsCollector.ts
-│   │   └── RAGService.ts
+│   │   └── RAGService.ts         # Generic orchestrator
 │   ├── router.ts         # Express router
 │   └── index.ts
 ```
@@ -53,6 +125,7 @@ Before installing the plugin, ensure you have:
 1. **A running Backstage instance** - See [Backstage getting started docs](https://backstage.io/docs/getting-started)
 
 2. **Ollama server** - Install and run Ollama:
+
    ```bash
    # Install Ollama (macOS/Linux)
    curl -fsSL https://ollama.com/install.sh | sh
@@ -136,12 +209,19 @@ askAi:
   # Enable RAG functionality
   ragEnabled: true
   
+  # RAG strategy to use: 'simple' (default), or custom implementations
+  ragStrategy: "simple"
+  
   # Number of similar chunks to retrieve
   defaultTopK: 5
   
   # Document chunking configuration
   chunkSize: 512
   chunkOverlap: 50
+  
+  # Vector store configuration (memory or postgresql)
+  vectorStore:
+    type: memory  # or 'postgresql' for production
 ```
 
 ### 5. Add to Entity Page
@@ -191,11 +271,23 @@ const serviceEntityPage = (
 
 ### RAG Mode
 
-When RAG is enabled (default), the plugin:
+When RAG is enabled (default), the plugin uses the configured RAG strategy to answer questions:
+
+**Simple RAG Strategy (default):**
+
 1. Converts your question to an embedding
-2. Searches for relevant documentation chunks
+2. Searches for relevant documentation chunks using vector similarity
 3. Provides these as context to the LLM
 4. Generates an answer grounded in actual Backstage data
+
+**Future Strategies** (extensible via `IRAGStrategy`):
+
+- **Hybrid RAG**: Combines semantic search with keyword matching (BM25)
+- **ReRank RAG**: Uses cross-encoders to rerank retrieved chunks
+- **Multi-Query RAG**: Generates multiple query variations for better coverage
+- **Agentic RAG**: LLM decides when to retrieve more context iteratively
+- **Self-RAG**: Includes verification and self-correction steps
+- **Graph RAG**: Uses knowledge graphs for entity relationships
 
 ### Direct LLM Mode
 
@@ -208,6 +300,7 @@ Toggle off "Use RAG" to ask questions directly to the LLM without context retrie
 Ask a question with optional RAG.
 
 **Request:**
+
 ```json
 {
   "prompt": "What APIs does this service expose?",
@@ -219,6 +312,7 @@ Ask a question with optional RAG.
 ```
 
 **Response:**
+
 ```json
 {
   "answer": "Based on the documentation...",
@@ -240,6 +334,7 @@ Get indexing status.
 Index a specific entity.
 
 **Request:**
+
 ```json
 {
   "entityRef": "component:default/my-service"
@@ -287,27 +382,49 @@ yarn lint
 This plugin strictly follows SOLID principles:
 
 ### Single Responsibility Principle (SRP)
+
 - Each service has one clear responsibility
 - `OllamaLLMService`: Only handles LLM operations
-- `VectorStore`: Only handles vector storage
+- `PgVectorStore` / `InMemoryVectorStore`: Only handles vector storage
 - `DocumentProcessor`: Only handles document processing
+- `RAGService`: Only orchestrates strategy execution
+- `SimpleRAGStrategy`: Only implements the simple RAG algorithm
 
 ### Open/Closed Principle (OCP)
+
 - Services are open for extension via interfaces
-- Easy to add new vector stores or LLM providers
-- Implement `IVectorStore` for different backends
+- Easy to add new RAG strategies without modifying `RAGService`
+- Easy to add new vector stores by implementing `IVectorStore`
+- Easy to add new LLM providers by implementing `ILLMService`
+- Strategy pattern enables adding techniques like:
+  - Hybrid retrieval (semantic + keyword)
+  - Re-ranking strategies
+  - Multi-query generation
+  - Agentic RAG
+  - Self-RAG with verification
 
 ### Liskov Substitution Principle (LSP)
+
 - All services implement interfaces
-- Services can be swapped with implementations
+- Any `IRAGStrategy` can replace another without breaking `RAGService`
+- Any `IVectorStore` implementation works with any strategy
+- Services can be swapped with alternative implementations
 
 ### Interface Segregation Principle (ISP)
+
 - Small, focused interfaces
+- `IRAGStrategy` defines only core RAG operations
+- `IVectorStore` defines only vector operations
 - Clients depend only on interfaces they use
+- No fat interfaces forcing unused methods
 
 ### Dependency Inversion Principle (DIP)
+
 - High-level modules depend on abstractions
-- `RAGService` depends on interfaces, not concrete implementations
+- `RAGService` depends on `IRAGStrategy`, not concrete strategies
+- `SimpleRAGStrategy` depends on `ILLMService` and `IVectorStore` interfaces
+- All dependencies are injected via constructors
+- Enables easy testing with mocks
 
 ## Vector Store Options
 
@@ -318,11 +435,13 @@ The plugin supports multiple vector store backends for storing document embeddin
 **Best for**: Local development, testing, proof-of-concept
 
 The default in-memory vector store stores all embeddings in RAM. Simple and fast for development, but:
+
 - ❌ Data is lost on restart
 - ❌ Not scalable beyond ~10k vectors
 - ❌ No persistence across deployments
 
 **Configuration:**
+
 ```yaml
 askAi:
   vectorStore:
@@ -334,6 +453,7 @@ askAi:
 **Best for**: Production deployments, self-hosted environments
 
 PostgreSQL with the pgvector extension provides persistent, scalable vector storage:
+
 - ✅ Persistent storage (survives restarts)
 - ✅ ACID transactions
 - ✅ Efficient similarity search with HNSW index (O(log n))
@@ -344,11 +464,13 @@ PostgreSQL with the pgvector extension provides persistent, scalable vector stor
 **Quick Start:**
 
 1. **Start PostgreSQL with Docker:**
+
    ```bash
    docker-compose up -d postgres
    ```
 
 2. **Configure the plugin:**
+
    ```yaml
    askAi:
      vectorStore:
@@ -381,6 +503,7 @@ PostgreSQL with the pgvector extension provides persistent, scalable vector stor
 The plugin's interface-based design makes it easy to add other vector stores:
 
 **Pinecone** (Managed Cloud):
+
 ```typescript
 export class PineconeVectorStore implements IVectorStore {
   // Implementation using Pinecone SDK
@@ -388,6 +511,7 @@ export class PineconeVectorStore implements IVectorStore {
 ```
 
 **Weaviate** (Open-Source):
+
 ```typescript
 export class WeaviateVectorStore implements IVectorStore {
   // Implementation using Weaviate client
@@ -473,6 +597,7 @@ For personal, educational, and non-commercial purposes, this software is freely 
 **Commercial use of this software requires a separate commercial license.**
 
 Commercial use includes, but is not limited to:
+
 - Integration into commercial products or services
 - Use within organizations generating revenue
 - Deployment in enterprise or production environments for business purposes
