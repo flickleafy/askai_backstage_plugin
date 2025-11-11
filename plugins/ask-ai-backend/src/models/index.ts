@@ -134,6 +134,7 @@ export interface AskAiConfig {
   embeddingModel: string;
   ollamaBaseUrl: string;
   ragEnabled: boolean;
+  ragStrategy: string;
   defaultTopK: number;
   chunkSize: number;
   chunkOverlap: number;

@@ -24,7 +24,7 @@
 
 import { IVectorStore } from '../interfaces';
 import { EmbeddingVector, SearchResult } from '../models';
-import { Logger } from '@backstage/backend-common';
+import type { Logger } from 'winston';
 
 /**
  * In-memory vector store using cosine similarity

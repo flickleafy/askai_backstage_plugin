@@ -22,7 +22,7 @@
  * @packageDocumentation
  */
 
-import { Logger } from '@backstage/backend-common';
+import type { Logger } from 'winston';
 import { IVectorStore } from '../interfaces';
 import { ConfigService } from './ConfigService';
 import { InMemoryVectorStore } from './InMemoryVectorStore';

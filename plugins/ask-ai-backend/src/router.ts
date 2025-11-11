@@ -23,9 +23,8 @@
  */
 
 import express, { Request, Response, Router } from 'express';
-import { Logger } from '@backstage/backend-common';
+import type { Logger } from 'winston';
 import { Config } from '@backstage/config';
-import { DiscoveryApi } from '@backstage/core-plugin-api';
 import {
   ConfigService,
   OllamaLLMService,
@@ -36,6 +35,13 @@ import {
   RAGService,
 } from './services';
 import { AskQuestionRequest, AskQuestionResponse } from './models';
+
+/**
+ * Discovery API interface for service discovery
+ */
+export interface DiscoveryApi {
+  getBaseUrl(pluginId: string): Promise<string>;
+}
 
 /**
  * Plugin environment interface
@@ -103,24 +109,16 @@ export async function createAskAiRouter(env: PluginEnvironment): Promise<Router>
       let sources: any[] | undefined;
 
       if (useRAG) {
-        // Use RAG for answer generation
         const appConfig = configService.getConfig();
         const k = topK || appConfig.defaultTopK;
+        const ragResponse = await ragService.answerQuestion(prompt, {
+          topK: k,
+          entityId,
+          model,
+        });
 
-        // Retrieve relevant context
-        const context = await ragService.retrieveContext(prompt, k, entityId);
-
-        if (context.length === 0) {
-          logger.warn('No relevant context found, falling back to direct LLM');
-          answer = await llmService.chat(
-            [{ role: 'user', content: prompt }],
-            model
-          );
-        } else {
-          // Generate answer with context
-          answer = await ragService.generateAnswer(prompt, context, model);
-          sources = context;
-        }
+        answer = ragResponse.answer;
+        sources = ragResponse.sources.length ? ragResponse.sources : undefined;
       } else {
         // Direct LLM without RAG
         answer = await llmService.chat(

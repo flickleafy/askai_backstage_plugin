@@ -24,7 +24,7 @@
 
 import { IDocumentProcessor, IConfigService } from '../interfaces';
 import { DocumentChunk } from '../models';
-import { Logger } from '@backstage/backend-common';
+import type { Logger } from 'winston';
 
 /**
  * Service for processing documents into chunks

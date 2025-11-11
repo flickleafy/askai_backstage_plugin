@@ -23,7 +23,7 @@
  */
 
 import { Pool, PoolClient, QueryResult } from 'pg';
-import { Logger } from '@backstage/backend-common';
+import type { Logger } from 'winston';
 import { IVectorStore } from '../interfaces';
 import { EmbeddingVector, SearchResult, PostgresConfig } from '../models';
 
@@ -38,18 +38,20 @@ import { EmbeddingVector, SearchResult, PostgresConfig } from '../models';
  * - Connection pooling for performance
  * - Automatic migration on initialization
  */
+type PoolLike = Pick<Pool, 'connect' | 'end' | 'on'>;
+
 export class PgVectorStore implements IVectorStore {
   private readonly logger: Logger;
-  private readonly pool: Pool;
+  private readonly pool: PoolLike;
   private readonly config: PostgresConfig;
   private initialized: boolean = false;
 
-  constructor(logger: Logger, config: PostgresConfig) {
+  constructor(logger: Logger, config: PostgresConfig, pool?: PoolLike) {
     this.logger = logger;
     this.config = config;
     
     // Initialize connection pool
-    this.pool = new Pool({
+    this.pool = pool ?? new Pool({
       host: config.host,
       port: config.port,
       database: config.database,

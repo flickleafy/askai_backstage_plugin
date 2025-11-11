@@ -31,6 +31,7 @@ import {
   OllamaEmbedResponse,
   AskAiConfig,
 } from '../models';
+import type { RAGAnswer, RAGQuestionOptions } from '../rag/types';
 
 /**
  * Interface for LLM service operations
@@ -158,9 +159,14 @@ export interface IRAGService {
   retrieveContext(query: string, topK: number, entityId?: string): Promise<DocumentChunk[]>;
 
   /**
-   * Generate an answer using RAG
+   * Generate an answer using RAG (backwards compatibility)
    */
   generateAnswer(query: string, context: DocumentChunk[], model?: string): Promise<string>;
+
+  /**
+   * High-level helper to answer a user question with the active strategy.
+   */
+  answerQuestion(query: string, options?: RAGQuestionOptions): Promise<RAGAnswer>;
 }
 
 /**

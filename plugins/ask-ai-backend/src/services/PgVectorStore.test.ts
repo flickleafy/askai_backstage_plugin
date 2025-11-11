@@ -20,38 +20,43 @@
  * Tests vector store operations with mocked PostgreSQL client
  */
 
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { PgVectorStore } from './PgVectorStore';
 import { EmbeddingVector, DocumentChunk } from '../models';
 import { Pool } from 'pg';
 
+const mockClient = {
+  query: jest.fn(async () => ({})),
+  release: jest.fn(),
+};
+
+const mockPool = {
+  connect: jest.fn(async () => mockClient),
+  query: jest.fn(),
+  end: jest.fn(),
+  on: jest.fn(),
+};
+
 // Mock pg Pool
-jest.mock('pg', () => {
-  const mockClient = {
-    query: jest.fn(),
-    release: jest.fn(),
-  };
-  
-  const mockPool = {
-    connect: jest.fn(() => Promise.resolve(mockClient)),
-    query: jest.fn(),
-    end: jest.fn(),
-    on: jest.fn(),
-  };
-  
-  return {
-    Pool: jest.fn(() => mockPool),
-  };
-});
+jest.mock('pg', () => ({
+  Pool: jest.fn(() => mockPool),
+}));
 
 describe('PgVectorStore', () => {
   let vectorStore: PgVectorStore;
   let mockLogger: any;
-  let mockPool: any;
-  let mockClient: any;
 
   beforeEach(() => {
     // Reset mocks
     jest.clearAllMocks();
+    mockClient.query.mockClear();
+    mockClient.release.mockClear();
+    mockClient.query.mockImplementation(async () => ({}));
+    mockPool.connect.mockClear();
+  mockPool.connect.mockImplementation(async () => mockClient);
+    mockPool.query.mockClear();
+    mockPool.end.mockClear();
+    mockPool.on.mockClear();
     
     // Create mock logger
     mockLogger = {
@@ -60,14 +65,6 @@ describe('PgVectorStore', () => {
       warn: jest.fn(),
       error: jest.fn(),
     };
-
-    // Get mock pool and client
-    mockPool = new Pool({} as any);
-    mockClient = {
-      query: jest.fn(),
-      release: jest.fn(),
-    };
-    (mockPool.connect as jest.Mock).mockResolvedValue(mockClient);
 
     // Create vector store
     const config = {
@@ -80,7 +77,7 @@ describe('PgVectorStore', () => {
       maxConnections: 10,
     };
 
-    vectorStore = new PgVectorStore(mockLogger, config);
+    vectorStore = new PgVectorStore(mockLogger, config, mockPool as unknown as any);
   });
 
   describe('initialize', () => {

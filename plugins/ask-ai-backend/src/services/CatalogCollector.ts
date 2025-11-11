@@ -25,8 +25,8 @@
 import { CatalogClient } from '@backstage/catalog-client';
 import { Entity } from '@backstage/catalog-model';
 import { ICatalogCollector } from '../interfaces';
-import { Logger } from '@backstage/backend-common';
-import { DiscoveryApi } from '@backstage/core-plugin-api';
+import type { Logger } from 'winston';
+import type { DiscoveryApi } from '../router';
 
 /**
  * Service for collecting entity data from Backstage catalog

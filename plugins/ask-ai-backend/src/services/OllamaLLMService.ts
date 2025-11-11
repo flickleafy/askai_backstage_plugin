@@ -25,7 +25,7 @@
 import fetch from 'node-fetch';
 import { ILLMService, IConfigService, ServiceDependencies } from '../interfaces';
 import { ChatMessage, OllamaChatResponse, OllamaEmbedResponse } from '../models';
-import { Logger } from '@backstage/backend-common';
+import type { Logger } from 'winston';
 
 /**
  * Service for interacting with Ollama LLM

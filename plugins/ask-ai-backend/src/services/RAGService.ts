@@ -22,17 +22,16 @@
  * @packageDocumentation
  */
 
+import type { Logger } from 'winston';
 import {
   IRAGService,
   RAGServiceDependencies,
-  ILLMService,
+  IConfigService,
   IVectorStore,
-  IDocumentProcessor,
-  ICatalogCollector,
-  ITechDocsCollector,
 } from '../interfaces';
-import { DocumentChunk, ChatMessage, EmbeddingVector } from '../models';
-import { Logger } from '@backstage/backend-common';
+import { DocumentChunk } from '../models';
+import { RAGStrategyFactory } from '../rag';
+import { IRAGStrategy, RAGAnswer, RAGQuestionOptions } from '../rag/types';
 
 /**
  * Service that orchestrates the RAG pipeline
@@ -40,22 +39,18 @@ import { Logger } from '@backstage/backend-common';
  */
 export class RAGService implements IRAGService {
   private readonly logger: Logger;
-  private readonly llmService: ILLMService;
   private readonly vectorStore: IVectorStore;
-  private readonly documentProcessor: IDocumentProcessor;
-  private readonly catalogCollector: ICatalogCollector;
-  private readonly techDocsCollector: ITechDocsCollector;
+  private readonly configService: IConfigService;
+  private readonly strategy: IRAGStrategy;
 
   private indexingInProgress = false;
   private lastIndexTime: Date | null = null;
 
   constructor(dependencies: RAGServiceDependencies) {
     this.logger = dependencies.logger;
-    this.llmService = dependencies.llmService;
     this.vectorStore = dependencies.vectorStore;
-    this.documentProcessor = dependencies.documentProcessor;
-    this.catalogCollector = dependencies.catalogCollector;
-    this.techDocsCollector = dependencies.techDocsCollector;
+    this.configService = dependencies.config;
+    this.strategy = RAGStrategyFactory.create(dependencies);
   }
 
   /**
@@ -71,29 +66,8 @@ export class RAGService implements IRAGService {
       this.indexingInProgress = true;
       this.logger.info('Starting full document indexing');
 
-      // Clear existing vectors
-      await this.vectorStore.clear();
-
-      // Fetch all entities
-      const entities = await this.catalogCollector.fetchAllEntities();
-      this.logger.info(`Indexing ${entities.length} entities`);
-
-      // Process entities in batches to avoid overwhelming the system
-      const batchSize = 10;
-      for (let i = 0; i < entities.length; i += batchSize) {
-        const batch = entities.slice(i, i + batchSize);
-        await Promise.all(
-          batch.map(entity => this.indexEntityInternal(entity))
-        );
-        this.logger.info(`Indexed ${Math.min(i + batchSize, entities.length)}/${entities.length} entities`);
-      }
-
+      await this.strategy.indexAll();
       this.lastIndexTime = new Date();
-      const vectorCount = await this.vectorStore.count();
-      
-      this.logger.info(
-        `Indexing complete. Total vectors stored: ${vectorCount}`
-      );
     } catch (error) {
       this.logger.error(`Indexing failed: ${error}`);
       throw error;
@@ -107,75 +81,10 @@ export class RAGService implements IRAGService {
    */
   async indexEntity(entityRef: string): Promise<void> {
     try {
-      this.logger.info(`Indexing entity: ${entityRef}`);
-      const entity = await this.catalogCollector.fetchEntity(entityRef);
-      await this.indexEntityInternal(entity);
+      await this.strategy.indexEntity(entityRef);
     } catch (error) {
       this.logger.error(`Failed to index entity ${entityRef}: ${error}`);
       throw error;
-    }
-  }
-
-  /**
-   * Internal method to index an entity
-   */
-  private async indexEntityInternal(entity: any): Promise<void> {
-    const entityRef = this.catalogCollector.getEntityRef(entity);
-    const entityName = entity.metadata.name;
-    const allChunks: DocumentChunk[] = [];
-
-    try {
-      // Extract catalog metadata
-      const catalogContent = this.catalogCollector.extractEntityContent(entity);
-      const catalogChunks = this.documentProcessor.chunkDocument(
-        catalogContent,
-        entityRef,
-        entityName,
-        'catalog'
-      );
-      allChunks.push(...catalogChunks);
-
-      // Fetch and process TechDocs if available
-      const hasDocs = await this.techDocsCollector.hasDocumentation(entityRef);
-      if (hasDocs) {
-        const documentation = await this.techDocsCollector.fetchDocumentation(entityRef);
-        if (documentation) {
-          const docChunks = this.documentProcessor.chunkDocument(
-            documentation,
-            entityRef,
-            entityName,
-            'techdocs'
-          );
-          allChunks.push(...docChunks);
-        }
-      }
-
-      if (allChunks.length === 0) {
-        this.logger.debug(`No chunks created for ${entityName}`);
-        return;
-      }
-
-      // Generate embeddings for all chunks
-      const chunkTexts = allChunks.map(chunk => chunk.content);
-      const embeddings = await this.llmService.generateEmbeddings(chunkTexts);
-
-      // Create embedding vectors
-      const embeddingVectors: EmbeddingVector[] = allChunks.map((chunk, index) => ({
-        id: chunk.id,
-        chunkId: chunk.id,
-        vector: embeddings[index],
-        documentChunk: chunk,
-      }));
-
-      // Store in vector store
-      await this.vectorStore.storeBatch(embeddingVectors);
-
-      this.logger.debug(
-        `Indexed ${allChunks.length} chunks for ${entityName}`
-      );
-    } catch (error) {
-      this.logger.error(`Failed to index ${entityName}: ${error}`);
-      // Continue with other entities instead of failing completely
     }
   }
 
@@ -188,20 +97,7 @@ export class RAGService implements IRAGService {
     entityId?: string
   ): Promise<DocumentChunk[]> {
     try {
-      this.logger.info(`Retrieving context for query (topK: ${topK})`);
-
-      // Generate query embedding
-      const queryEmbeddings = await this.llmService.generateEmbeddings([query]);
-      const queryVector = queryEmbeddings[0];
-
-      // Search vector store
-      const results = await this.vectorStore.search(queryVector, topK, entityId);
-
-      // Extract document chunks
-      const chunks = results.map(result => result.documentChunk);
-
-      this.logger.info(`Retrieved ${chunks.length} relevant chunks`);
-      return chunks;
+      return await this.strategy.retrieve({ query, topK, entityId });
     } catch (error) {
       this.logger.error(`Context retrieval failed: ${error}`);
       throw error;
@@ -217,53 +113,28 @@ export class RAGService implements IRAGService {
     model?: string
   ): Promise<string> {
     try {
-      this.logger.info('Generating answer with RAG');
-
-      // Build context string
-      const contextString = this.buildContextString(context);
-
-      // Create messages for chat
-      const messages: ChatMessage[] = [
-        {
-          role: 'system',
-          content: `You are a helpful assistant that answers questions about Backstage projects and services. 
-Use the following context to answer the user's question. If the answer cannot be found in the context, say so.
-Always cite which service or entity you're referring to when providing information.
-
-Context:
-${contextString}`,
-        },
-        {
-          role: 'user',
-          content: query,
-        },
-      ];
-
-      // Generate answer
-      const answer = await this.llmService.chat(messages, model);
-
-      this.logger.info('Successfully generated RAG answer');
-      return answer;
+      const response = await this.strategy.answer({
+        query,
+        model,
+        context,
+        topK: context.length || this.configService.getConfig().defaultTopK,
+      });
+      return response.answer;
     } catch (error) {
       this.logger.error(`Answer generation failed: ${error}`);
       throw error;
     }
   }
 
-  /**
-   * Build a formatted context string from chunks
-   */
-  private buildContextString(chunks: DocumentChunk[]): string {
-    if (chunks.length === 0) {
-      return 'No relevant context found.';
-    }
-
-    const contextParts = chunks.map((chunk, index) => {
-      return `[${index + 1}] Entity: ${chunk.entityName} (Source: ${chunk.metadata.source})
-${chunk.content}`;
+  async answerQuestion(query: string, options?: RAGQuestionOptions): Promise<RAGAnswer> {
+    const topK = options?.topK ?? this.configService.getConfig().defaultTopK;
+    return this.strategy.answer({
+      query,
+      topK,
+      entityId: options?.entityId,
+      model: options?.model,
+      context: options?.context,
     });
-
-    return contextParts.join('\n\n---\n\n');
   }
 
   /**

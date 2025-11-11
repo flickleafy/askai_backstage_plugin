@@ -23,8 +23,8 @@
  */
 
 import { ITechDocsCollector } from '../interfaces';
-import { Logger } from '@backstage/backend-common';
-import { DiscoveryApi } from '@backstage/core-plugin-api';
+import type { Logger } from 'winston';
+import type { DiscoveryApi } from '../router';
 import fetch from 'node-fetch';
 
 /**

@@ -48,6 +48,7 @@ export class ConfigService implements IConfigService {
       embeddingModel: this.config.getOptionalString('askAi.embeddingModel') || 'all-minilm',
       ollamaBaseUrl: this.config.getOptionalString('askAi.ollamaBaseUrl') || 'http://localhost:11434',
       ragEnabled: this.config.getOptionalBoolean('askAi.ragEnabled') ?? true,
+      ragStrategy: this.config.getOptionalString('askAi.rag.strategy') || 'simple',
       defaultTopK: this.config.getOptionalNumber('askAi.defaultTopK') || 5,
       chunkSize: this.config.getOptionalNumber('askAi.chunkSize') || 512,
       chunkOverlap: this.config.getOptionalNumber('askAi.chunkOverlap') || 50,

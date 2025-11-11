@@ -1,2 +1,115 @@
 docs
 .github
+
+# Node.js dependencies
+node_modules/
+**/node_modules/
+
+# npm
+npm-debug.log*
+npm-error.log*
+.npm/
+.npmrc
+npm-shrinkwrap.json
+package-lock.json
+
+# yarn
+yarn-debug.log*
+yarn-error.log*
+yarn.lock
+.yarn/
+.yarn-integrity
+.yarn-metadata.json
+.pnp.*
+
+# pnpm
+.pnpm-debug.log*
+pnpm-lock.yaml
+.pnpm-store/
+
+# Lerna
+lerna-debug.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+.cache/
+
+# Coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# Environment and config
+.env
+.env.local
+.env.*.local
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Logs
+logs/
+*.log
+
+# TypeScript
+*.tsbuildinfo
+
+# Testing
+.jest/
+
+# React.js specific
+# Production build
+/build
+
+# Development
+.next/
+out/
+
+# React dev server
+.react/
+
+# React Native
+.expo/
+.expo-shared/
+
+# Storybook
+storybook-static/
+
+# React hot reload
+.hot-update.json
+*.hot-update.js
+*.hot-update.js.map
+
+# Webpack
+.webpack/
+
+# Parcel
+.parcel-cache/
+
+# ESLint cache
+.eslintcache
+
+# Stylelint cache
+.stylelintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
